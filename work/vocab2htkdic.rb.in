@@ -1,0 +1,354 @@
+#! @@RUBY@@ -Ku
+# -*- coding: utf-8-unix; mode: ruby -*-
+
+
+############################################################
+## information
+
+=begin
+	Pronunciation Model (HTK-dictionary) Creator
+	Copyright (C) 2011 Yasutaka SHINDOH
+Brief:
+	発音モデル (HTK単語辞書) 生成スクリプト。
+	標準入力から語彙ファイル (*.vocab) を読み込み、
+	標準出力に発音モデルを書き出す。
+Author:
+	Yasutaka SHINDOH / 新堂 安孝
+Maintainer:
+	Yasutaka SHINDOH / 新堂 安孝
+License:
+	CC BY-SA <http://creativecommons.org/>
+Require:
+	Ruby 1.8, cat, zcat, gzip, bzip2, lzma, lzip, xz, iconv
+=end
+
+
+############################################################
+## main: read libraries
+
+begin
+    require 'optparse'
+rescue
+    warn "ERROR: #{$!}"
+    exit(false)
+end
+
+
+############################################################
+## constant variable
+
+# エラー発生時に代替として使用する音素列
+ERROR_PHONES = 'ERROR'
+
+# 「モーラ⇒音素列」テーブル・ファイルのパス
+REPLECE_TABLE_PATH = 'japanese.k2p.gz'
+
+# 「モーラ⇒音素列」テーブル・ファイルの文字コード
+REPLECE_TABLE_CODE = 'EUC-JP'
+
+# 形態素における見出し、発音、品詞などを結合しているセパレータ文字列
+WORD_ENTRY_SEPARATOR = '+'
+
+# 形態素における発音情報の位置 (例: 日+{ヒ/ニチ}+名詞 => 2)
+WORD_ENTRY_PRONUNCIATION = 2
+
+# 本スクリプト・ファイルの文字コード
+VOCAB2HTKDIC_CODE = 'UTF-8'
+
+# 本スクリプト・ファイルの (本来の) 名称
+VOCAB2HTKDIC_NAME = 'vocab2htkdic.rb'
+
+# 本スクリプト・ファイルのバージョン
+VOCAB2HTKDIC_VERSION = '2.0.0RC1'
+
+
+############################################################
+# function: print version
+
+def version()
+	warn <<VERSION
+#{File::basename(__FILE__)} [#{VOCAB2HTKDIC_NAME} #{VOCAB2HTKDIC_VERSION} / #{VOCAB2HTKDIC_CODE}] on Ruby [#{RUBY_VERSION} / #{RUBY_PLATFORM}]
+  Copyright (C) 2011 Yasutaka SHINDOH
+
+  This is Open Source Software <http://www.opensource.org/>.
+  You may redistribute copies of it under the terms of
+  Creative Commons License BY-SA <http://creativecommons.org/>.
+  There is NO WARRANTY, to the extent permitted by law.
+
+  written by Yasutaka SHINDOH
+VERSION
+end
+
+
+############################################################
+# function: print help
+
+def usage()
+	warn <<HELP
+USAGE: #{File::basename(__FILE__)} [OPTION(S)...] < input.vocab > output.dic
+  OPTIONS:
+    -v        --> バージョン情報
+    -h        --> ヘルプ情報
+    -t PATH   --> 「モーラ⇒音素列」テーブル・ファイルのパス
+                  - デフォルト値 "#{REPLECE_TABLE_PATH}"
+    -c CODE   --> 「モーラ⇒音素列」テーブル・ファイルの文字コード
+                  - "iconv -l" で獲得できる文字コードを指定
+                  - デフォルト値 "#{REPLECE_TABLE_CODE}"
+    -s STRING --> 形態素の見出し、発音などを結合しているセパレータ文字列
+                  - デフォルト値 "#{WORD_ENTRY_SEPARATOR}"
+    -p NUMBER --> 形態素における発音情報の位置
+                  - デフォルト値 "#{WORD_ENTRY_PRONUNCIATION.to_s}"
+    -l PATH   --> 論理音素テーブル・ファイルのパス
+                  - デフォルト値 未設定
+HELP
+end
+
+
+############################################################
+# function: open command
+
+def open_command(path, internal=VOCAB2HTKDIC_CODE, external=VOCAB2HTKDIC_CODE)
+    command_line = String::new
+    case path
+    when /\.z\z/ then
+        command_line << sprintf('zcat %s', path)
+    when /\.gz\z/ then
+        command_line << sprintf('gzip -cd %s', path)
+    when /\.bz2\z/ then
+        command_line << sprintf('bzip2 -cd %s', path)
+    when /\.lzma\z/ then
+        command_line << sprintf('lzma -cd %s', path)
+    when /\.lz\z/ then
+        command_line << sprintf('lzip -cd %s', path)
+    when /\.xz\z/ then
+        command_line << sprintf('xz -cd %s', path)
+    else
+        command_line << sprintf('cat %s', path)
+    end
+    if internal and external and internal != external then
+        command_line << sprintf(' | iconv -f %s -t %s', internal, external)
+    end
+    command_line
+end
+
+
+############################################################
+# function: create moras-sequence
+
+def moras_sequence(pronunciation, output=nil)
+    output = Array::new unless output
+    if /\A([^{\/}]*)\{([^{}]+)\}/ =~ pronunciation then
+        # 展開
+        head = $1
+        bodies = $2
+        tail = $'
+        bodies.split('/').each { |body|
+            moras_sequence(head + body + tail, output)
+        }
+    else
+        # 展開完了
+        output << pronunciation
+    end
+    output
+end
+
+
+############################################################
+# function: create phones-sequence
+
+def phones_sequence(moras, table, output=nil)
+    target = moras.split(//)
+    buffer = Array::new
+    moras = Array::new
+    result = Array::new
+    until target.empty? do
+        # 最長一致
+        key = target.join('')
+        if table[key] then
+            result << table[key]
+            moras << target.dup
+            target.clear
+            tmp = buffer
+            buffer = target
+            target = tmp
+        else
+            letter = target.pop
+            buffer.unshift(letter)
+            if target.empty? then
+                unless moras.empty? then
+                    # バックトラック法
+                    result.pop
+                    mora = moras.pop
+                    letter = mora.pop
+                    buffer.unshift(letter)
+                    mora.each { |letter|
+                        target << letter
+                    }
+                end
+            end
+        end
+    end
+    if buffer.empty? then
+        result = result.join(' ')
+    else
+        result = ERROR_PHONES
+    end
+    output << result if output
+    result
+end
+
+
+############################################################
+## main: analyze options
+
+option = OptionParser::new
+
+# -v, --version: バージョン情報表示
+version_flag = false
+option.on('-v', '--version') { |v|
+    version_flag = true
+}
+
+# -h, --help, --usage: ヘルプ情報表示
+help_flag = false
+option.on('-h', '--help', '--usage') { |v|
+    help_flag = true
+}
+
+# -t, --table: 「モーラ⇒音素列」テーブル・ファイルのパス
+replece_table_path = REPLECE_TABLE_PATH
+option.on('-t PATH', '--table PATH') { |path|
+    replece_table_path = path
+}
+
+# -c, --code: 「モーラ⇒音素列」テーブル・ファイルの文字コード
+replece_table_code = REPLECE_TABLE_CODE
+option.on('-c CODE', '--coding CODE') { |code|
+    replece_table_code = code
+}
+
+# -s, --separator: 形態素における見出し、発音、品詞などを結合しているセパレータ文字列
+word_entry_separator = WORD_ENTRY_SEPARATOR
+option.on('-s SEPARATOR', '--string SEPARATOR') { |separator|
+    word_entry_separator = separator
+}
+
+# -p, --pronunciation: 形態素における発音情報の位置
+word_entry_pronunciation = WORD_ENTRY_PRONUNCIATION
+option.on('-p NUMBER', '--pronunciation NUMBER', Integer) { |number|
+    word_entry_pronunciation = number
+}
+
+begin
+    option.parse!(ARGV)
+rescue
+    warn "ERROR: #{$!}"
+    usage
+    exit(false)
+end
+
+if version_flag or help_flag or 0 < ARGV.length then
+    version if version_flag
+    usage if help_flag or 0 < ARGV.length
+    exit
+end
+
+
+############################################################
+## main: read replace table
+
+word_table = Hash::new
+mora_table = Hash::new
+
+begin
+    command = open_command(replece_table_path, replece_table_code, VOCAB2HTKDIC_CODE)
+    IO::popen(command, 'r') { |file|
+        file.each_line { |line|
+            line.strip!
+            case line
+            when /\A\#{2}/ then
+                # コメント行
+            when /\A([^\s\[]+)\s+\[([^\[\]]*)\]\s+(\S.*)\z/ then
+                # 直接変換 ("hoge [fuga] a b c..." 形式)
+                title = $1
+                output = $2
+                phones = $3.gsub(/\s+/, ' ')
+                word_table[title] = [ output, phones ]
+            when /\A(\S+)\s+(\S.*)\z/ then
+                # 「モーラ⇒音素列」変換 ("hoge a b c..." 形式)
+                mora = $1
+                phones = $2.gsub(/\s+/, ' ')
+                mora_table[mora] = phones
+            when /\A(\S+)\z/ then
+                # 削除 ("hoge" 形式)
+                mora = $1
+                mora_table[mora] = ''
+            when /\A\z/ then
+                # 空行
+            else
+                # エラー
+                warn sprintf('ERROR: found invalid line "%s" in %s', line, replece_table_path)
+                exit(false)
+            end
+        }
+    }
+rescue
+    warn "ERROR: #{$!}"
+    exit(false)
+end
+
+word_table.freeze
+mora_table.freeze
+
+
+############################################################
+## main: read vocab file, write HTK-dictionary file
+
+moras_array = Array::new
+phones_array = Array::new
+phones_moras_table = Hash::new
+error_array = Array::new
+INDEX = word_entry_pronunciation - 1
+
+STDIN.each_line { |word|
+    word.strip!
+    # 処理しない
+    next if word.empty?			# 空行
+    next if /\A\#{2}/ =~ word	# コメント行
+    # 直接変換
+    if word_table[word] then
+        puts sprintf("%s\t[%s]\t%s", word, word_table[word][0], word_table[word][1])
+        next
+    end
+    # 「モーラ列⇒音素列」変換
+    terms = word.split(word_entry_separator)
+    if word_entry_pronunciation <= terms.length then
+        moras_sequence(terms[INDEX], moras_array)
+        moras_array.each { |moras|
+            phones_sequence(moras, mora_table, phones_array)
+        }
+        if 0 < phones_array.length then
+            phones_array.each_index { |i|
+                phones = phones_array[i]
+                moras = moras_array[i]
+                phones_moras_table[phones] = Array::new unless phones_moras_table[phones]
+                phones_moras_table[phones] << moras
+            }
+            phones_moras_table.keys.sort.each { |phones|
+                if ERROR_PHONES == phones then
+                    puts sprintf("%s\t[%s]\t%s (%s)", word, terms[0], ERROR_PHONES, phones_moras_table[phones].join(', '))
+                else
+                    puts sprintf("%s\t[%s]\t%s", word, terms[0], phones)
+                end
+            }
+            phones_array.clear
+            phones_moras_table.clear
+        else
+            puts sprintf("%s\t[%s]\t%s", word, terms[0], ERROR_PHONES)
+        end
+        moras_array.clear
+        next
+    end
+    # 不正
+    puts sprintf("%s\t[%s]\t%s", word, word, ERROR_PHONES)
+}
