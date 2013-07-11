@@ -1,13 +1,13 @@
 #! @@RUBY@@ -Ku
-# -*- coding: utf-8-unix; mode: ruby -*-
+# -*- coding: utf-8; mode: ruby -*-
 
 
 ############################################################
 ## information
 
 =begin
-	Pronunciation Model (HTK-dictionary) Creator
-	Copyright (C) 2011 Yasutaka SHINDOH
+	Pronunciation Model (HTK-dictionary) Builder
+	Copyright (C) 2011, 2013 Yasutaka SHINDOH
 Brief:
 	発音モデル (HTK単語辞書) 生成スクリプト。
 	標準入力から語彙ファイル (*.vocab) を読み込み、
