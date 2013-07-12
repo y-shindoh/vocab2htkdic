@@ -59,7 +59,7 @@ VOCAB2HTKDIC_CODE = 'UTF-8'
 VOCAB2HTKDIC_NAME = 'vocab2htkdic.rb'
 
 # 本スクリプト・ファイルのバージョン
-VOCAB2HTKDIC_VERSION = '2.0.0RC1'
+VOCAB2HTKDIC_VERSION = '2.0.0'
 
 
 ############################################################
@@ -68,7 +68,7 @@ VOCAB2HTKDIC_VERSION = '2.0.0RC1'
 def version()
 	warn <<VERSION
 #{File::basename(__FILE__)} [#{VOCAB2HTKDIC_NAME} #{VOCAB2HTKDIC_VERSION} / #{VOCAB2HTKDIC_CODE}] on Ruby [#{RUBY_VERSION} / #{RUBY_PLATFORM}]
-  Copyright (C) 2011 Yasutaka SHINDOH
+  Copyright (C) 2011, 2013 Yasutaka SHINDOH
 
   This is Open Source Software <http://www.opensource.org/>.
   You may redistribute copies of it under the terms of
