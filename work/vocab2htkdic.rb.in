@@ -19,7 +19,7 @@ Maintainer:
 License:
 	CC BY-SA <http://creativecommons.org/>
 Require:
-	Ruby 1.8, cat, zcat, gzip, bzip2, lzma, lzip, xz, iconv
+	Ruby 1.8 or later, cat, zcat, gzip, bzip2, lzma, lzip, xz, iconv
 =end
 
 
